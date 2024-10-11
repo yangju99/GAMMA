@@ -323,7 +323,7 @@ class MultiSourceEncoder(nn.Module):
 
 
 class MainModel(nn.Module):
-    def __init__(self, node_num, device, normal_avg, alpha=0.1, **kwargs):
+    def __init__(self, node_num, device, alpha=0.1, **kwargs):
         super(MainModel, self).__init__()
 
         self.device = device
@@ -331,7 +331,6 @@ class MainModel(nn.Module):
         self.alpha = alpha
         self.weight_loss = kwargs['weight_loss']
         self.encoder = MultiSourceEncoder(self.node_num, device, alpha=alpha, **kwargs)
-        self.normal_avg = normal_avg
 
         self.get_prob = nn.Softmax(dim=-1)
         self.detector_criterion = nn.CrossEntropyLoss() #self.detector_criterion = nn.CrossEntropyLoss(torch.FloatTensor(self.weight_loss).to(device))
@@ -339,11 +338,11 @@ class MainModel(nn.Module):
         
         self.detector = FullyConnected(self.encoder.feat_out_dim, 2, [64, 64]).to(device)
         
-        self.localizers = []
-
+        localizers = []
         for i in range(self.node_num):
             localizer = FullyConnected(self.encoder.feat_out_dim, 2, [64, 64]).to(device)
-            self.localizers.append(localizer)
+            localizers.append(localizer)
+        self.localizers = nn.ModuleList(localizers)
 
     def forward(self, graph, anomaly_gt, rootcause_gt):  
         batch_size = graph.batch_size
@@ -363,20 +362,21 @@ class MainModel(nn.Module):
         detect_prob_logits = self.get_prob(detect_logits) 
 
 
-        local_prob_logits = []
-        local_losses = [] 
+        local_prob_logits = [] #30 * 256 * 2
+        local_losses = [] # 30 
 
         for idx, localizer in enumerate(self.localizers):
             logits = localizer(embeddings)
-            loss = self.localizer_criterion(logits, y_local_anomalies[idx])
+            local_loss = self.localizer_criterion(logits, y_local_anomalies[idx])
             local_prob_logits.append(self.get_prob(logits))
-            local_losses.append(loss)
+            local_losses.append(local_loss)
+
 
         total_local_loss = sum(local_losses) * ((1 - self.alpha) / self.node_num)
         total_detect_loss = detect_loss * self.alpha
         loss = total_detect_loss + total_local_loss
 
-
+        
         y_pred = self.inference(graph, detect_prob_logits, local_prob_logits)
         return {'loss': loss,'y_pred': y_pred}
 
@@ -394,8 +394,8 @@ class MainModel(nn.Module):
 
             else: #anomaly 가 있다면?
                 rootcause_prob = [] 
-                for local_prob_logit in local_prob_logits:
-                    rootcause_prob.append(local_prob_logit[1])
+                for idx in range(self.node_num):
+                    rootcause_prob.append(local_prob_logits[idx][i][1])
                     
                 ranked_list = sorted(range(len(rootcause_prob)), key=lambda i: rootcause_prob[i], reverse=True)
 

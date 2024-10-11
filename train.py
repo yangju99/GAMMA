@@ -79,26 +79,22 @@ def run(params):
     train_data = chunkDataset(train_chunks, edges, params['nodes'])
     test_data = chunkDataset(test_chunks, edges, params['nodes'])
 
-    normal_avg = extract_normal_status(train_data)
-
     train_dl = DataLoader(train_data, batch_size = params['batch_size'], shuffle=True, collate_fn=collate, pin_memory=True)
     test_dl = DataLoader(test_data, batch_size = params['batch_size'], shuffle=False, collate_fn=collate, pin_memory=True)
     logging.info("Data loaded successfully!")
 
     device = get_device(params["check_device"])
-    model = BaseModel(nodes, device, normal_avg, lr = params["learning_rate"], **params)
+    model = BaseModel(nodes, device, lr = params["learning_rate"], **params)
 
+    # #For training!! 
+    # print("hash_id: ", hash_id)
+    # scores, converge = model.fit(train_dl, test_dl, evaluation_epoch= params['evaluation_epoch'])
+    # dump_scores(params["model_save_dir"], hash_id, scores, converge)
+    # logging.info("Current hash_id {}".format(hash_id))
 
-    #For training!! 
-    print("hash_id: ", hash_id)
-    scores, converge = model.fit(train_dl, test_dl, evaluation_epoch= params['evaluation_epoch'])
-    dump_scores(params["model_save_dir"], hash_id, scores, converge)
-    logging.info("Current hash_id {}".format(hash_id))
-
-    # #For testing!!
-    # model.load_model("./results/d07fe124/model.ckpt")
-    # eval_result = model.evaluate(test_dl, datatype="Test")
-    # eval_result = model.evaluate(test_dl, is_random=True, datatype="Test") #testing random ranked list 
+    #For testing!!
+    model.load_model("./results/d07fe124/model.ckpt")
+    eval_result = model.evaluate(test_dl, datatype="Test")
 
 # Instantiate your Dataset and DataLoader
 ############################################################################
@@ -107,7 +103,7 @@ if __name__ == "__main__":
     nodes = 30
     batch_size = 256
     random_seed = 12345
-    epochs = 12
+    epochs = 10
     learning_rate = 0.001 
     model = "all"
     result_dir = "./results"
